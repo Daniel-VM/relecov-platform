@@ -1,18 +1,9 @@
 # Generic imports
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
-import core.api.serializers
 
 # Local imports
-import core.utils.samples
 import core.utils.schema
-import core.utils.bioinfo_analysis
-import core.utils.labs
-import core.utils.public_db
-import core.utils.variants
-import core.utils.generic_functions
-import core.utils.lineage
-import core.config
 from core.services import index_services
 from core.services import schema_services
 from core.services import sample_services
