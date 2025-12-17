@@ -304,13 +304,62 @@ class MetadataVisualization(models.Model):
     objects = MetadataVisualizationManager()
 
 
+class MetadataGroup(models.Model):
+    sample = models.ForeignKey(
+        "core.Sample", on_delete=models.CASCADE, related_name="metadata_groups"
+    )
+    group_property = models.ForeignKey(
+        "core.SchemaProperties",
+        on_delete=models.CASCADE,
+        related_name="metadata_groups",
+    )
+    group_index = models.IntegerField()
+    created_at = models.DateTimeField(blank=True)
+
+    class Meta:
+        db_table = "core_metadata_group"
+        # Just to ensure that there are no duplicate groups for the same sample
+        constraints = [
+            models.UniqueConstraint(
+                fields=["sample", "group_property", "group_index"],
+                name="uniq_metadata_group_sample_prop_index",
+            )
+        ]
+        indexes = [models.Index(fields=["sample", "group_property"])]
+
+    def __str__(self):
+        return f"{self.sample.sample_unique_id}:{self.group_property.property}[{self.group_index}]"
+
+
 class MetadataValuesManager(models.Manager):
     def create_new_value(self, data):
+        # Get group object
+        group_obj = data.get("group")
+        group_id = data.get("group_id")
+        if group_obj is not None and not isinstance(group_obj, MetadataGroup):
+            group_obj = MetadataGroup.objects.get(pk=group_obj)
+        elif group_obj is None and group_id is not None:
+            group_obj = MetadataGroup.objects.get(pk=group_id)
+
+        # verify that the value and its group belong to the same sample (sample)
+        if group_obj is not None:
+            sample_value = data["sample_id"]
+            sample_id = getattr(sample_value, "pk", sample_value)
+            if isinstance(sample_id, str) and sample_id.isdigit():
+                sample_id = int(sample_id)
+            # If the group belongs to a sample_id other than the one provided, we throw an error
+            if group_obj.sample_id != sample_id:
+                raise ValueError(
+                    f"Invalid group: group.sample_id ({group_obj.sample_id}) "
+                    f"does not match sample_id ({sample_id})"
+                )
+        # Instance is validated, then create the new value to be stored in db
         new_value = self.create(
             value=data["value"],
             analysis_date=data["analysis_date"],
             sample=data["sample_id"],
             schema_property=data["schema_property_id"],
+            group=group_obj,
         )
         return new_value
 
@@ -327,9 +376,26 @@ class MetadataValues(models.Model):
         on_delete=models.CASCADE,
         related_name="metadata_values",
     )
+    group = models.ForeignKey(
+        "core.MetadataGroup",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="metadata_values",
+    )
 
     class Meta:
         db_table = "core_metadata_values"
+        indexes = [
+            models.Index(fields=["sample", "schema_property"]),
+            models.Index(fields=["group", "schema_property"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["group", "schema_property"],
+                name="uniq_metadata_values_group_schema_property",
+            )
+        ]
 
     def __str__(self):
         return "%s" % (self.value)
