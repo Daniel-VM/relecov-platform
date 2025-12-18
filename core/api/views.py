@@ -28,6 +28,39 @@ import core.api.utils.public_db
 import core.api.utils.variants
 import core.api.utils.common_functions
 import core.config
+from core.services import sample_ingestion
+
+
+@extend_schema(
+    request=core.api.serializers.SampleIngestSerializer,
+    responses={
+        200: OpenApiResponse(description="Sample ingested"),
+        201: OpenApiResponse(description="Sample created")
+        },
+)
+@authentication_classes([SessionAuthentication, BasicAuthentication])
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def ingest_sample(request):
+    # Serializer only validates the payload; it does not persist anything by design.
+    serializer = core.api.serializers.SampleIngestSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    # Service handles idempotent creation so it can be reused outside HTTP (CLI, tasks, etc.).
+    try:
+        sample_obj, created = sample_ingestion.ingest_sample(serializer.validated_data)
+    except ValueError as exc:
+        return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    # TODO: Next steps will attach metadata/variants from relecov-tools payload to this sample.
+    return Response(
+        {
+            "sample_unique_id": sample_obj.sample_unique_id,
+            "sequencing_sample_id": sample_obj.sequencing_sample_id,
+            "created": created,
+        },
+        status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+    )
 
 
 # TODO: add validate step. relecov tool.

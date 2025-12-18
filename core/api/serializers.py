@@ -11,6 +11,23 @@ class CreateMetadataValueSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class SampleIngestSerializer(serializers.ModelSerializer):
+    # Extra fields not in the Sample model but needed for lookups/forward-compat.
+    schema_name = serializers.CharField(
+        required=True, allow_blank=False, allow_null=False, write_only=True
+    )
+    schema_version = serializers.CharField(
+        required=True, allow_blank=False, allow_null=False, write_only=True
+    )
+    authors = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True, write_only=True
+    )
+
+    class Meta:
+        model = core.models.Sample
+        fields = "__all__"
+
+
 class SampleStateHistorySerializer(serializers.ModelSerializer):
     class Meta:
         model = core.models.SampleStateHistory

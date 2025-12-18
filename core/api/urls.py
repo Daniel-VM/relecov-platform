@@ -8,6 +8,7 @@ app_name = "relecov_api"
 
 
 urlpatterns = [
+    path("ingestSample", core.api.views.ingest_sample, name="ingest_sample"),
     path(
         "createBioinfoData",
         core.api.views.create_metadata_value,
