@@ -42,17 +42,18 @@ from core.services import sample_ingestion
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def ingest_sample(request):
-    # Serializer only validates the payload; it does not persist anything by design.
+    # Validate request containing samples data
     serializer = core.api.serializers.SampleIngestSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
 
-    # Service handles idempotent creation so it can be reused outside HTTP (CLI, tasks, etc.).
+    # Run service for sample ingestion
     try:
-        sample_obj, created = sample_ingestion.ingest_sample(serializer.validated_data)
+        sample_obj, created = sample_ingestion.ingest_sample(
+            serializer.validated_data, request_user=request.user
+        )
     except ValueError as exc:
         return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-    # TODO: Next steps will attach metadata/variants from relecov-tools payload to this sample.
     return Response(
         {
             "sample_unique_id": sample_obj.sample_unique_id,
