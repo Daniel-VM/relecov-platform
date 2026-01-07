@@ -1,0 +1,538 @@
+openapi: 3.0.3
+
+info:
+  title: Pathowebcore API
+  version: "1.0.0"
+
+servers:
+  - url: https://api.example.com
+
+tags:
+  - name: Samples
+    description: Sample management endpoints
+
+components:
+  securitySchemes:
+    sessionAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
+    basicAuth:
+      type: http
+      scheme: basic
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+    ValidationError:
+      type: object
+      required: [error, details]
+      properties:
+        error:
+          type: string
+          example: validation_error
+        details:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+
+    Sample:
+      type: object
+      required: [id, code, created_at]
+      properties:
+        id:
+          type: string
+        code:
+          type: string
+        status:
+          type: string
+        owner_user_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    SampleList:
+      type: array
+      items:
+        $ref: "#/components/schemas/Sample"
+
+    SamplePatch:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+        notes:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+
+    SampleIngestRequest:
+      type: object
+      description: In progress.
+      additionalProperties: true
+
+    Bioinfo:
+      type: object
+      required: [id, sample_id, created_at]
+      properties:
+        id:
+          type: string
+        sample_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        data:
+          type: object
+          additionalProperties: true
+
+    BioinfoCreateRequest:
+      type: object
+      description: In progress.
+      additionalProperties: true
+
+    SampleHistoryEvent:
+      type: object
+      required: [at, action]
+      properties:
+        at:
+          type: string
+          format: date-time
+        actor_user_id:
+          type: string
+        action:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+    SampleHistory:
+      type: array
+      items:
+        $ref: "#/components/schemas/SampleHistoryEvent"
+
+    SampleAssignUserRequest:
+      type: object
+      required: [user_id]
+      properties:
+        user_id:
+          type: string
+
+paths:
+  /v1/samples/ingest:
+    post:
+      tags: [Samples]
+      summary: Ingest sample metadata
+      description: Ingesta de samples. Falla si la muestra ya está registrada. Requires admin privileges.
+      operationId: ingestSample
+      security:
+        - sessionAuth: []
+        - basicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SampleIngestRequest"
+            example:
+              code: SAMPLE-001
+      responses:
+        "201":
+          description: Sample created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Sample"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Sample already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/samples:
+    get:
+      tags: [Samples]
+      summary: List samples
+      operationId: listSamples
+      security:
+        - sessionAuth: []
+        - basicAuth: []
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SampleList"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/samples/{sample_unique_id}:
+    get:
+      tags: [Samples]
+      summary: Get sample
+      operationId: getSample
+      security:
+        - sessionAuth: []
+        - basicAuth: []
+      parameters:
+        - name: sample_unique_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 12
+          description: Business identifier of the sample (sample_unique_id)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Sample"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    patch:
+      tags: [Samples]
+      summary: Update sample
+      description: Actualiza campos permitidos. Requires admin privileges.
+      operationId: patchSample
+      security:
+        - sessionAuth: []
+        - basicAuth: []
+      parameters:
+        - name: sample_unique_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 12
+          description: Business identifier of the sample (sample_unique_id)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SamplePatch"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Sample"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/samples/{sample_unique_id}/bioinfo:
+    get:
+      tags: [Samples]
+      summary: Get bioinfo
+      operationId: getSampleBioinfo
+      security:
+        - sessionAuth: []
+        - basicAuth: []
+      parameters:
+        - name: sample_unique_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 12
+          description: Business identifier of the sample (sample_unique_id)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bioinfo"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    post:
+      tags: [Samples]
+      summary: Create bioinfo
+      description: Crea bioinfo asociada a la muestra. Requires admin privileges.
+      operationId: createSampleBioinfo
+      security:
+        - sessionAuth: []
+        - basicAuth: []
+      parameters:
+        - name: sample_unique_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 12
+          description: Business identifier of the sample (sample_unique_id)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BioinfoCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bioinfo"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/samples/{sample_unique_id}/history:
+    get:
+      tags: [Samples]
+      summary: Get sample history
+      operationId: getSampleHistory
+      security:
+        - sessionAuth: []
+        - basicAuth: []
+      parameters:
+        - name: sample_unique_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 12
+          description: Business identifier of the sample (sample_unique_id)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SampleHistory"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/samples/{sample_unique_id}/assign-user:
+    post:
+      tags: [Samples]
+      summary: Assign sample to user
+      description: Asigna una muestra a un usuario. Requires admin privileges.
+      operationId: assignSampleUser
+      security:
+        - sessionAuth: []
+        - basicAuth: []
+      parameters:
+        - name: sample_unique_id
+          in: path
+          required: true
+          schema:
+            type: string
+            maxLength: 12
+          description: Business identifier of the sample (sample_unique_id)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SampleAssignUserRequest"
+            example:
+              user_id: "123"
+      responses:
+        "200":
+          description: Assigned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Sample"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
