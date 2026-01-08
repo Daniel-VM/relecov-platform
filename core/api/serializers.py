@@ -59,6 +59,36 @@ class ErrorSerializer(serializers.Serializer):
     error = serializers.CharField()
 
 
+# TODO: Add or remove request filters.
+class SampleFilterSerializer(serializers.Serializer):
+    sample_unique_id = serializers.CharField(required=False, allow_blank=False)
+    sequencing_sample_id = serializers.CharField(required=False, allow_blank=False)
+    collecting_institution = serializers.CharField(required=False, allow_blank=False)
+    collecting_lab_sample_id = serializers.CharField(required=False, allow_blank=False)
+    microbiology_lab_sample_id = serializers.CharField(required=False, allow_blank=False)
+    submitting_lab_sample_id = serializers.CharField(required=False, allow_blank=False)
+    schema_name = serializers.CharField(required=False, allow_blank=False)
+    schema_version = serializers.CharField(required=False, allow_blank=False)
+    created_at_from = serializers.DateTimeField(required=False)
+    created_at_to = serializers.DateTimeField(required=False)
+    sequencing_date_from = serializers.DateTimeField(required=False)
+    sequencing_date_to = serializers.DateTimeField(required=False)
+
+
+# TODO: Add or remove response filters.
+class SampleListItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = core.models.Sample
+        fields = [
+            "sample_unique_id",
+            "sequencing_sample_id",
+            "collecting_institution",
+            "created_at",
+            "schema_obj",
+            "user",
+        ]
+
+
 #### Old serializers TODO: refactor or remove ####
 
 class CreateMetadataValueSerializer(serializers.ModelSerializer):

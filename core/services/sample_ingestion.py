@@ -62,5 +62,4 @@ def ingest_sample(sample_payload: dict, request_user=None) -> Tuple[models.Sampl
         sample_obj.schema_obj = schema_obj
         sample_obj.save(update_fields=["schema_obj"])
 
-    # TODO: Future steps will enrich this sample with metadata/variants once available.
     return sample_obj, created

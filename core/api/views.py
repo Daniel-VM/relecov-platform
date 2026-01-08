@@ -1,6 +1,6 @@
 # Generic imports
 from rest_framework.authentication import SessionAuthentication, BasicAuthentication
-from rest_framework.permissions import (IsAuthenticated, IsAdminUser)
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import (
     authentication_classes,
     permission_classes,
@@ -13,6 +13,7 @@ from drf_spectacular.utils import (
     OpenApiExample,
     inline_serializer,
     OpenApiResponse,
+    extend_schema_view,
 )
 from rest_framework import serializers
 from django.http import QueryDict
@@ -29,42 +30,80 @@ import core.api.utils.variants
 import core.api.utils.common_functions
 import core.config
 from core.services import sample_ingestion
+from core.services import sample_listing
 
-# TODO: define required fields for sample ingestion
-@extend_schema(
-    request=core.api.serializers.SampleIngestSerializer,
-    responses={
-        200: core.api.serializers.SampleIngestResponseSerializer,
-        201: core.api.serializers.SampleIngestResponseSerializer,
-        400: core.api.serializers.ErrorSerializer,
-        404: core.api.serializers.ErrorSerializer,
-        409: core.api.serializers.ErrorSerializer,
-    },
+@extend_schema_view(
+    post=extend_schema(
+        request=core.api.serializers.SampleIngestSerializer,
+        responses={
+            200: core.api.serializers.SampleIngestResponseSerializer,
+            201: core.api.serializers.SampleIngestResponseSerializer,
+            400: core.api.serializers.ErrorSerializer,
+            404: core.api.serializers.ErrorSerializer,
+            409: core.api.serializers.ErrorSerializer,
+        },
+    ),
+    get=extend_schema(
+        request=core.api.serializers.SampleFilterSerializer,
+        responses={
+            200: core.api.serializers.SampleListItemSerializer(many=True),
+            401: core.api.serializers.ErrorSerializer,
+            404: core.api.serializers.ErrorSerializer,
+        },
+    ),
 )
 @authentication_classes([SessionAuthentication, BasicAuthentication])
-@api_view(["POST"])
-@permission_classes([IsAdminUser])
-def ingest_sample(request):
-    # Validate request body
-    serializer = core.api.serializers.SampleIngestSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def samples(request):
+    if request.method == "POST":
+        # Few checks
+        if not request.user.is_staff:
+            return Response(
+                {"error": "Admin privileges required"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        serializer = core.api.serializers.SampleIngestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-    # Run service for sample ingestion
-    try:
-        sample_obj, created = sample_ingestion.ingest_sample(
-            serializer.validated_data, request_user=request.user
+        # Create/Ingest Sample
+        try:
+            sample_obj, created = sample_ingestion.ingest_sample(
+                serializer.validated_data, request_user=request.user
+            )
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Prepare POST response
+        response_serializer = core.api.serializers.SampleIngestResponseSerializer(
+            data={
+                "sample_unique_id": sample_obj.sample_unique_id,
+                "sequencing_sample_id": sample_obj.sequencing_sample_id,
+                "created": created,
+            }
         )
+        response_serializer.is_valid(raise_exception=True)
+
+        # Return
+        return Response(
+            response_serializer.data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+    # GET samples with filters
+    data = request.data or request.query_params
+    filter_serializer = core.api.serializers.SampleFilterSerializer(data=data)
+    filter_serializer.is_valid(raise_exception=True)
+    try:
+        queryset = sample_listing.list_samples(filter_serializer.validated_data)
     except ValueError as exc:
         return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-
-    return Response(
-        {
-            "sample_unique_id": sample_obj.sample_unique_id,
-            "sequencing_sample_id": sample_obj.sequencing_sample_id,
-            "created": created,
-        },
-        status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+    if not queryset.exists():
+        return Response({"error": "No samples found"}, status=status.HTTP_404_NOT_FOUND)
+    response_serializer = core.api.serializers.SampleListItemSerializer(
+        queryset, many=True
     )
+    return Response(response_serializer.data, status=status.HTTP_200_OK)
 
 ######################### TODO: refactor or remove ###########
 # TODO: add validate step. relecov tool.
