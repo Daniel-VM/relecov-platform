@@ -703,9 +703,6 @@ class Sample(models.Model):
     schema_obj = models.ForeignKey(
         Schema, on_delete=models.CASCADE, null=True, blank=True
     )
-    lineage_values = models.ManyToManyField(LineageValues, blank=True)
-    lineage_info = models.ManyToManyField(LineageInfo, blank=True)
-
     sample_unique_id = models.CharField(max_length=12)
     microbiology_lab_sample_id = models.CharField(max_length=80, null=True, blank=True)
     collecting_lab_sample_id = models.CharField(max_length=80, null=True, blank=True)
