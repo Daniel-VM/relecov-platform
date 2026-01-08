@@ -87,8 +87,77 @@ components:
 
     SampleIngestRequest:
       type: object
-      description: In progress.
-      additionalProperties: true
+      properties:
+        sample_unique_id:
+          type: string
+          maxLength: 12
+        sequencing_sample_id:
+          type: string
+          nullable: true
+          maxLength: 80
+        authors:
+          type: string
+          writeOnly: true
+          nullable: true
+        collecting_institution:
+          type: string
+          nullable: true
+          maxLength: 120
+        collecting_lab_sample_id:
+          type: string
+          nullable: true
+          maxLength: 80
+        microbiology_lab_sample_id:
+          type: string
+          nullable: true
+          maxLength: 80
+        submitting_lab_sample_id:
+          type: string
+          nullable: true
+          maxLength: 80
+        schema_name:
+          type: string
+          writeOnly: true
+        schema_version:
+          type: string
+          writeOnly: true
+        sequencing_date:
+          type: string
+          format: date-time
+          nullable: true
+        sequence_file_R1_md5:
+          type: string
+          nullable: true
+          maxLength: 80
+        sequence_file_R2_md5:
+          type: string
+          nullable: true
+          maxLength: 80
+        sequence_file_path_r1:
+          type: string
+          nullable: true
+        sequence_file_path_r2:
+          type: string
+          nullable: true
+      required:
+        - sample_unique_id
+        - schema_name
+        - schema_version
+
+    SampleIngestResponse:
+      type: object
+      properties:
+        sample_unique_id:
+          type: string
+        sequencing_sample_id:
+          type: string
+          nullable: true
+        created:
+          type: boolean
+      required:
+        - created
+        - sample_unique_id
+        - sequencing_sample_id
 
     Bioinfo:
       type: object
@@ -156,12 +225,18 @@ paths:
             example:
               code: SAMPLE-001
       responses:
+        "200":
+          description: Sample already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SampleIngestResponse"
         "201":
           description: Sample created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Sample"
+                $ref: "#/components/schemas/SampleIngestResponse"
         "400":
           description: Validation error
           content:

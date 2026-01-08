@@ -1,6 +1,6 @@
 # Generic imports
 from rest_framework.authentication import SessionAuthentication, BasicAuthentication
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import (IsAuthenticated, IsAdminUser)
 from rest_framework.decorators import (
     authentication_classes,
     permission_classes,
@@ -30,19 +30,22 @@ import core.api.utils.common_functions
 import core.config
 from core.services import sample_ingestion
 
-
+# TODO: define required fields for sample ingestion
 @extend_schema(
     request=core.api.serializers.SampleIngestSerializer,
     responses={
-        200: OpenApiResponse(description="Sample ingested"),
-        201: OpenApiResponse(description="Sample created")
-        },
+        200: core.api.serializers.SampleIngestResponseSerializer,
+        201: core.api.serializers.SampleIngestResponseSerializer,
+        400: core.api.serializers.ErrorSerializer,
+        404: core.api.serializers.ErrorSerializer,
+        409: core.api.serializers.ErrorSerializer,
+    },
 )
 @authentication_classes([SessionAuthentication, BasicAuthentication])
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAdminUser])
 def ingest_sample(request):
-    # Validate request containing samples data
+    # Validate request body
     serializer = core.api.serializers.SampleIngestSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
 
@@ -63,7 +66,7 @@ def ingest_sample(request):
         status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
     )
 
-
+######################### TODO: refactor or remove ###########
 # TODO: add validate step. relecov tool.
 @extend_schema(
     examples=[
