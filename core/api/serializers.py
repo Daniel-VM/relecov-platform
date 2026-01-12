@@ -97,11 +97,56 @@ class SampleListItemSerializer(serializers.ModelSerializer):
         fields = [
             "sample_unique_id",
             "sequencing_sample_id",
-            "collecting_institution",
+            #"collecting_institution",
             "created_at",
             "schema_name",
             "schema_version",
         ]
+
+
+# TODO: Decide response fields for sample detail.
+class SampleDetailSerializer(serializers.ModelSerializer):
+    schema_name = serializers.CharField(source="schema_obj.schema_name", read_only=True)
+    schema_version = serializers.CharField(
+        source="schema_obj.schema_version", read_only=True
+    )
+
+    class Meta:
+        model = core.models.Sample
+        fields = [
+            "sample_unique_id",
+            "sequencing_sample_id",
+            "microbiology_lab_sample_id",
+            "collecting_lab_sample_id",
+            "submitting_lab_sample_id",
+            "collecting_institution",
+            "sequence_file_R1_md5",
+            "sequence_file_R2_md5",
+            "r1_fastq_filepath",
+            "r2_fastq_filepath",
+            "sequencing_date",
+            "created_at",
+            "schema_name",
+            "schema_version",
+        ]
+
+
+class SampleMetadataFilterSerializer(serializers.Serializer):
+    classification = serializers.ListField(
+        child=serializers.CharField(), required=False, allow_empty=False
+    )
+    property = serializers.ListField(
+        child=serializers.CharField(), required=False, allow_empty=False
+    )
+
+
+# FIXME: point to metadata values model instead
+class SampleMetadataItemSerializer(serializers.Serializer):
+    property = serializers.CharField()
+    value = serializers.CharField(allow_null=True, allow_blank=True)
+    classification = serializers.CharField(allow_blank=True, allow_null=True)
+    group_id = serializers.IntegerField(allow_null=True)
+    group_index = serializers.IntegerField(allow_null=True)
 
 
 #### Old serializers TODO: refactor or remove ####

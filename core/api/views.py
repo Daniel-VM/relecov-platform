@@ -31,6 +31,8 @@ import core.api.utils.common_functions
 import core.config
 from core.services import sample_ingestion
 from core.services import sample_listing
+from core.services import sample_detail
+from core.services import sample_metadata
 
 @extend_schema_view(
     post=extend_schema(
@@ -102,6 +104,85 @@ def samples(request):
         return Response({"error": "No samples found"}, status=status.HTTP_404_NOT_FOUND)
     response_serializer = core.api.serializers.SampleListItemSerializer(
         queryset, many=True
+    )
+    return Response(response_serializer.data, status=status.HTTP_200_OK)
+
+@extend_schema(
+    responses={
+        200: core.api.serializers.SampleDetailSerializer,
+        401: core.api.serializers.ErrorSerializer,
+        403: core.api.serializers.ErrorSerializer,
+        404: core.api.serializers.ErrorSerializer,
+    },
+)
+@authentication_classes([SessionAuthentication, BasicAuthentication])
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def sample_detail_view(request, sample_unique_id):
+    sample_obj = sample_detail.get_sample_detail(sample_unique_id)
+    if sample_obj is None:
+        return Response({"error": "Sample not found"}, status=status.HTTP_404_NOT_FOUND)
+    response_serializer = core.api.serializers.SampleDetailSerializer(sample_obj)
+    return Response(response_serializer.data, status=status.HTTP_200_OK)
+
+# FIXME: It requires bioinfo post endpoint before testing
+@extend_schema(
+    parameters=[
+        inline_serializer(
+            name="SampleMetadataQuery",
+            fields={
+                "classification": serializers.ListField(
+                    child=serializers.CharField(), required=False
+                ),
+                "property": serializers.ListField(child=serializers.CharField(), required=False),
+            },
+        )
+    ],
+    responses={
+        200: core.api.serializers.SampleMetadataItemSerializer(many=True),
+        401: core.api.serializers.ErrorSerializer,
+        403: core.api.serializers.ErrorSerializer,
+        404: core.api.serializers.ErrorSerializer,
+        400: core.api.serializers.ErrorSerializer,
+    },
+)
+@authentication_classes([SessionAuthentication, BasicAuthentication])
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def sample_metadata_view(request, sample_unique_id):
+    sample_obj = sample_detail.get_sample_detail(sample_unique_id)
+    if sample_obj is None:
+        return Response({"error": "Sample not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    classifications = request.query_params.getlist("classification")
+    properties = request.query_params.getlist("property")
+    if len(classifications) == 1 and "," in classifications[0]:
+        classifications = [item.strip() for item in classifications[0].split(",") if item.strip()]
+    if len(properties) == 1 and "," in properties[0]:
+        properties = [item.strip() for item in properties[0].split(",") if item.strip()]
+
+    filter_data = {}
+    if classifications:
+        filter_data["classification"] = classifications
+    if properties:
+        filter_data["property"] = properties
+
+    if filter_data:
+        filter_serializer = core.api.serializers.SampleMetadataFilterSerializer(
+            data=filter_data
+        )
+        filter_serializer.is_valid(raise_exception=True)
+        classifications = filter_serializer.validated_data.get("classification")
+        properties = filter_serializer.validated_data.get("property")
+
+    metadata_list = sample_metadata.list_sample_metadata(
+        sample_obj,
+        classifications=classifications or None,
+        properties=properties or None,
+    )
+    # TODO: verify output once bioinfo metadata ingestion is implemented.
+    response_serializer = core.api.serializers.SampleMetadataItemSerializer(
+        metadata_list, many=True
     )
     return Response(response_serializer.data, status=status.HTTP_200_OK)
 
