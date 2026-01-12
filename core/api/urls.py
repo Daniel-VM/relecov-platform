@@ -6,7 +6,7 @@ import core.api.views
 
 app_name = "relecov_api"
 
-
+# TODO: remove "api" layer from path once stable
 urlpatterns = [
     path("samples", core.api.views.samples, name="samples"),
     #path(

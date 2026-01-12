@@ -77,6 +77,11 @@ class SampleFilterSerializer(serializers.Serializer):
 
 # TODO: Add or remove response filters.
 class SampleListItemSerializer(serializers.ModelSerializer):
+    schema_name = serializers.CharField(source="schema_obj.schema_name", read_only=True)
+    schema_version = serializers.CharField(
+        source="schema_obj.schema_version", read_only=True
+    )
+
     class Meta:
         model = core.models.Sample
         fields = [
@@ -84,8 +89,8 @@ class SampleListItemSerializer(serializers.ModelSerializer):
             "sequencing_sample_id",
             "collecting_institution",
             "created_at",
-            "schema_obj",
-            "user",
+            "schema_name",
+            "schema_version",
         ]
 
 
