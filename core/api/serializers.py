@@ -74,6 +74,16 @@ class SampleFilterSerializer(serializers.Serializer):
     sequencing_date_from = serializers.DateTimeField(required=False)
     sequencing_date_to = serializers.DateTimeField(required=False)
 
+    def validate(self, attrs):
+        allowed_keys = set(self.fields.keys())
+        provided_keys = set(self.initial_data.keys())
+        unknown_keys = provided_keys - allowed_keys
+        if unknown_keys:
+            raise serializers.ValidationError(
+                {"error": f"Unknown filter(s): {', '.join(sorted(unknown_keys))}"}
+            )
+        return attrs
+
 
 # TODO: Add or remove response filters.
 class SampleListItemSerializer(serializers.ModelSerializer):
