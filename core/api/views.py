@@ -76,6 +76,25 @@ def samples(request):
             )
         except ValueError as exc:
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        # If created, add initial state history
+        if created:
+            state_obj = core.models.SampleState.objects.filter(
+                state__exact="Defined"
+            ).last()
+            if state_obj is None:
+                return Response(
+                    {"error": "Sample state 'Defined' not configured"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            try:
+                result = core.api.utils.common_functions.add_sample_state_history(
+                    sample_obj, state_id=state_obj.pk, error_name="No error"
+                )
+            except ValueError as exc:
+                return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            if isinstance(result, Response):
+                return result
         
         # Prepare POST response
         response_serializer = core.api.serializers.SampleIngestResponseSerializer(
@@ -169,6 +188,7 @@ def sample_metadata_view(request, sample_unique_id):
     if sample_obj is None:
         return Response({"error": "Sample not found"}, status=status.HTTP_404_NOT_FOUND)
 
+    # GET method
     if request.method == "GET":
         classifications = request.query_params.getlist("classification")
         properties = request.query_params.getlist("property")
@@ -205,6 +225,7 @@ def sample_metadata_view(request, sample_unique_id):
         )
         return Response(response_serializer.data, status=status.HTTP_200_OK)
 
+    # POST method
     if not request.user.is_staff:
         return Response(
             {"error": "Admin privileges required"},
@@ -216,14 +237,27 @@ def sample_metadata_view(request, sample_unique_id):
 
     schema_name = serializer.validated_data.get("schema_name")
     schema_version = serializer.validated_data.get("schema_version")
-    schema_obj = core.models.Schema.objects.filter(
-        schema_name=schema_name, schema_version=schema_version
-    ).last()
-    if schema_obj is None:
-        return Response(
-            {"error": "Schema not found for provided name/version"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+    if schema_name and schema_version:
+        schema_obj = core.models.Schema.objects.filter(
+            schema_name=schema_name, schema_version=schema_version
+        ).last()
+        if schema_obj is None:
+            return Response(
+                {"error": "Schema not found for provided name/version"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if sample_obj.schema_obj_id and sample_obj.schema_obj_id != schema_obj.id:
+            return Response(
+                {"error": "Schema does not match sample schema"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+    else:
+        schema_obj = sample_obj.schema_obj
+        if schema_obj is None:
+            return Response(
+                {"error": "Sample has no schema assigned"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     try:
         stored_count = sample_metadata_ingestion.ingest_sample_metadata(
@@ -231,6 +265,22 @@ def sample_metadata_view(request, sample_unique_id):
         )
     except ValueError as exc:
         return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    if stored_count:
+        state_obj = core.models.SampleState.objects.filter(state__exact="Bioinfo").last()
+        if state_obj is None:
+            return Response(
+                {"error": "Sample state 'Bioinfo' not configured"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            result = core.api.utils.common_functions.add_sample_state_history(
+                sample_obj, state_id=state_obj.pk, error_name="No error"
+            )
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        if isinstance(result, Response):
+            return result
 
     response_serializer = core.api.serializers.SampleMetadataIngestResponseSerializer(
         data={"sample_unique_id": sample_unique_id, "stored_count": stored_count}

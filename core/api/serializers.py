@@ -48,6 +48,10 @@ class SampleIngestSerializer(serializers.ModelSerializer):
             "sequence_file_path_r2",
         ]
 
+class SampleStateHistorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = core.models.SampleStateHistory
+        fields = "__all__"
 
 class SampleIngestResponseSerializer(serializers.Serializer):
     sample_unique_id = serializers.CharField()
@@ -150,10 +154,16 @@ class SampleMetadataItemSerializer(serializers.Serializer):
 
 
 class SampleMetadataIngestSerializer(serializers.Serializer):
-    schema_name = serializers.CharField(required=True, allow_blank=False)
-    schema_version = serializers.CharField(required=True, allow_blank=False)
+    schema_name = serializers.CharField(required=False, allow_blank=False)
+    schema_version = serializers.CharField(required=False, allow_blank=False)
 
     def validate(self, attrs):
+        schema_name = attrs.get("schema_name")
+        schema_version = attrs.get("schema_version")
+        if (schema_name and not schema_version) or (schema_version and not schema_name):
+            raise serializers.ValidationError(
+                {"error": "schema_name and schema_version must be provided together"}
+            )
         attrs["payload"] = self.initial_data
         return attrs
 
@@ -168,10 +178,6 @@ class SampleMetadataIngestResponseSerializer(serializers.Serializer):
 class CreateMetadataValueSerializer(serializers.ModelSerializer):
     class Meta:
         model = core.models.MetadataValues
-        fields = "__all__"
-class SampleStateHistorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = core.models.SampleStateHistory
         fields = "__all__"
 
 
