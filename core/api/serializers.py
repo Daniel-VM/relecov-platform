@@ -149,6 +149,20 @@ class SampleMetadataItemSerializer(serializers.Serializer):
     group_index = serializers.IntegerField(allow_null=True)
 
 
+class SampleMetadataIngestSerializer(serializers.Serializer):
+    schema_name = serializers.CharField(required=True, allow_blank=False)
+    schema_version = serializers.CharField(required=True, allow_blank=False)
+
+    def validate(self, attrs):
+        attrs["payload"] = self.initial_data
+        return attrs
+
+
+class SampleMetadataIngestResponseSerializer(serializers.Serializer):
+    sample_unique_id = serializers.CharField()
+    stored_count = serializers.IntegerField()
+
+
 #### Old serializers TODO: refactor or remove ####
 
 class CreateMetadataValueSerializer(serializers.ModelSerializer):

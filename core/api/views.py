@@ -33,6 +33,7 @@ from core.services import sample_ingestion
 from core.services import sample_listing
 from core.services import sample_detail
 from core.services import sample_metadata
+from core.services import sample_metadata_ingestion
 
 @extend_schema_view(
     post=extend_schema(
@@ -126,65 +127,116 @@ def sample_detail_view(request, sample_unique_id):
     return Response(response_serializer.data, status=status.HTTP_200_OK)
 
 # FIXME: It requires bioinfo post endpoint before testing
-@extend_schema(
-    parameters=[
-        inline_serializer(
-            name="SampleMetadataQuery",
-            fields={
-                "classification": serializers.ListField(
-                    child=serializers.CharField(), required=False
-                ),
-                "property": serializers.ListField(child=serializers.CharField(), required=False),
-            },
-        )
-    ],
-    responses={
-        200: core.api.serializers.SampleMetadataItemSerializer(many=True),
-        401: core.api.serializers.ErrorSerializer,
-        403: core.api.serializers.ErrorSerializer,
-        404: core.api.serializers.ErrorSerializer,
-        400: core.api.serializers.ErrorSerializer,
-    },
+@extend_schema_view(
+    get=extend_schema(
+        parameters=[
+            inline_serializer(
+                name="SampleMetadataQuery",
+                fields={
+                    "classification": serializers.ListField(
+                        child=serializers.CharField(), required=False
+                    ),
+                    "property": serializers.ListField(
+                        child=serializers.CharField(), required=False
+                    ),
+                },
+            )
+        ],
+        responses={
+            200: core.api.serializers.SampleMetadataItemSerializer(many=True),
+            401: core.api.serializers.ErrorSerializer,
+            403: core.api.serializers.ErrorSerializer,
+            404: core.api.serializers.ErrorSerializer,
+            400: core.api.serializers.ErrorSerializer,
+        },
+    ),
+    post=extend_schema(
+        request=core.api.serializers.SampleMetadataIngestSerializer,
+        responses={
+            201: core.api.serializers.SampleMetadataIngestResponseSerializer,
+            400: core.api.serializers.ErrorSerializer,
+            401: core.api.serializers.ErrorSerializer,
+            403: core.api.serializers.ErrorSerializer,
+            404: core.api.serializers.ErrorSerializer,
+        },
+    ),
 )
 @authentication_classes([SessionAuthentication, BasicAuthentication])
-@api_view(["GET"])
+@api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
 def sample_metadata_view(request, sample_unique_id):
     sample_obj = sample_detail.get_sample_detail(sample_unique_id)
     if sample_obj is None:
         return Response({"error": "Sample not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    classifications = request.query_params.getlist("classification")
-    properties = request.query_params.getlist("property")
-    if len(classifications) == 1 and "," in classifications[0]:
-        classifications = [item.strip() for item in classifications[0].split(",") if item.strip()]
-    if len(properties) == 1 and "," in properties[0]:
-        properties = [item.strip() for item in properties[0].split(",") if item.strip()]
+    if request.method == "GET":
+        classifications = request.query_params.getlist("classification")
+        properties = request.query_params.getlist("property")
+        if len(classifications) == 1 and "," in classifications[0]:
+            classifications = [
+                item.strip() for item in classifications[0].split(",") if item.strip()
+            ]
+        if len(properties) == 1 and "," in properties[0]:
+            properties = [
+                item.strip() for item in properties[0].split(",") if item.strip()
+            ]
 
-    filter_data = {}
-    if classifications:
-        filter_data["classification"] = classifications
-    if properties:
-        filter_data["property"] = properties
+        filter_data = {}
+        if classifications:
+            filter_data["classification"] = classifications
+        if properties:
+            filter_data["property"] = properties
 
-    if filter_data:
-        filter_serializer = core.api.serializers.SampleMetadataFilterSerializer(
-            data=filter_data
+        if filter_data:
+            filter_serializer = core.api.serializers.SampleMetadataFilterSerializer(
+                data=filter_data
+            )
+            filter_serializer.is_valid(raise_exception=True)
+            classifications = filter_serializer.validated_data.get("classification")
+            properties = filter_serializer.validated_data.get("property")
+
+        metadata_list = sample_metadata.list_sample_metadata(
+            sample_obj,
+            classifications=classifications or None,
+            properties=properties or None,
         )
-        filter_serializer.is_valid(raise_exception=True)
-        classifications = filter_serializer.validated_data.get("classification")
-        properties = filter_serializer.validated_data.get("property")
+        response_serializer = core.api.serializers.SampleMetadataItemSerializer(
+            metadata_list, many=True
+        )
+        return Response(response_serializer.data, status=status.HTTP_200_OK)
 
-    metadata_list = sample_metadata.list_sample_metadata(
-        sample_obj,
-        classifications=classifications or None,
-        properties=properties or None,
+    if not request.user.is_staff:
+        return Response(
+            {"error": "Admin privileges required"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    serializer = core.api.serializers.SampleMetadataIngestSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    payload = serializer.validated_data["payload"]
+
+    schema_name = serializer.validated_data.get("schema_name")
+    schema_version = serializer.validated_data.get("schema_version")
+    schema_obj = core.models.Schema.objects.filter(
+        schema_name=schema_name, schema_version=schema_version
+    ).last()
+    if schema_obj is None:
+        return Response(
+            {"error": "Schema not found for provided name/version"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        stored_count = sample_metadata_ingestion.ingest_sample_metadata(
+            sample_obj, schema_obj, payload
+        )
+    except ValueError as exc:
+        return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    response_serializer = core.api.serializers.SampleMetadataIngestResponseSerializer(
+        data={"sample_unique_id": sample_unique_id, "stored_count": stored_count}
     )
-    # TODO: verify output once bioinfo metadata ingestion is implemented.
-    response_serializer = core.api.serializers.SampleMetadataItemSerializer(
-        metadata_list, many=True
-    )
-    return Response(response_serializer.data, status=status.HTTP_200_OK)
+    response_serializer.is_valid(raise_exception=True)
+    return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
 ######################### TODO: refactor or remove ###########
 # TODO: add validate step. relecov tool.
