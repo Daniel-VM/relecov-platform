@@ -1,3 +1,5 @@
+from django.utils.dateparse import parse_date, parse_datetime
+
 from core import models
 
 
@@ -13,9 +15,29 @@ def _get_sample_payload_fields():
             sample_payload_fields.add(field_name)
     return sample_payload_fields
 
+# TODO: harcoded date due to backward compatibility with models.MetadataValues.analysis_date not allowing nulls
+def _extract_analysis_date(payload):
+    raw_value = (
+        payload.get("bioinformatics_analysis_date")
+        or payload.get("analysis_date")
+    )
+    if raw_value is None:
+        raise ValueError(
+            "analysis_date is required (use bioinformatics_analysis_date or analysis_date)"
+        )
+    if hasattr(raw_value, "date"):
+        return raw_value.date()
+    if isinstance(raw_value, str):
+        parsed = parse_date(raw_value) or parse_datetime(raw_value)
+        if parsed is None:
+            raise ValueError("analysis_date must be an ISO date or datetime string")
+        return parsed.date() if hasattr(parsed, "date") else parsed
+    raise ValueError("analysis_date must be a string or date")
+
 
 def ingest_sample_metadata(sample_obj, schema_obj, payload):
     sample_payload_fields = _get_sample_payload_fields()
+    analysis_date = _extract_analysis_date(payload)
 
     stored_count = 0
     for field, value in payload.items():
@@ -39,8 +61,7 @@ def ingest_sample_metadata(sample_obj, schema_obj, payload):
             raise ValueError(f"Field '{field}' is not defined in schema properties")
         models.MetadataValues.objects.create(
             value=str(value),
-            analysis_date=payload.get("analysis_date")
-            or payload.get("lineage_analysis_date"),
+            analysis_date=analysis_date,
             sample=sample_obj,
             schema_property=property_obj,
         )

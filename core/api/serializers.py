@@ -57,6 +57,7 @@ class SampleIngestResponseSerializer(serializers.Serializer):
     sample_unique_id = serializers.CharField()
     sequencing_sample_id = serializers.CharField(allow_null=True, allow_blank=True)
     created = serializers.BooleanField()
+    status = serializers.CharField()
 
 
 class ErrorSerializer(serializers.Serializer):
@@ -171,6 +172,7 @@ class SampleMetadataIngestSerializer(serializers.Serializer):
 class SampleMetadataIngestResponseSerializer(serializers.Serializer):
     sample_unique_id = serializers.CharField()
     stored_count = serializers.IntegerField()
+    status = serializers.CharField()
 
 
 #### Old serializers TODO: refactor or remove ####

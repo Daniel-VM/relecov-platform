@@ -102,6 +102,7 @@ def samples(request):
                 "sample_unique_id": sample_obj.sample_unique_id,
                 "sequencing_sample_id": sample_obj.sequencing_sample_id,
                 "created": created,
+                "status": "created" if created else "existing",
             }
         )
         response_serializer.is_valid(raise_exception=True)
@@ -282,8 +283,13 @@ def sample_metadata_view(request, sample_unique_id):
         if isinstance(result, Response):
             return result
 
+    # TODO: document status and stored_counts in api
     response_serializer = core.api.serializers.SampleMetadataIngestResponseSerializer(
-        data={"sample_unique_id": sample_unique_id, "stored_count": stored_count}
+        data={
+            "sample_unique_id": sample_unique_id,
+            "stored_count": stored_count,
+            "status": "stored" if stored_count else "no_changes",
+        }
     )
     response_serializer.is_valid(raise_exception=True)
     return Response(response_serializer.data, status=status.HTTP_201_CREATED)
