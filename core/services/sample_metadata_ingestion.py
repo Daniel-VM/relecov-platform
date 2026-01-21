@@ -37,6 +37,9 @@ def _extract_analysis_date(payload):
 
 def ingest_sample_metadata(sample_obj, schema_obj, payload):
     sample_payload_fields = _get_sample_payload_fields()
+    if models.MetadataValues.objects.filter(sample=sample_obj).exists():
+        # Prevent repeat ingestion; future PUT/PATCH can handle updates.
+        raise ValueError("Metadata already stored for this sample")
     analysis_date = _extract_analysis_date(payload)
 
     stored_count = 0

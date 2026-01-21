@@ -75,7 +75,12 @@ def samples(request):
                 serializer.validated_data, request_user=request.user
             )
         except ValueError as exc:
-            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            error_message = str(exc)
+            if error_message == "Sample already exists":
+                return Response(
+                    {"error": error_message}, status=status.HTTP_409_CONFLICT
+                )
+            return Response({"error": error_message}, status=status.HTTP_400_BAD_REQUEST)
 
         # If created, add initial state history
         if created:
@@ -178,6 +183,7 @@ def sample_detail_view(request, sample_unique_id):
             401: core.api.serializers.ErrorSerializer,
             403: core.api.serializers.ErrorSerializer,
             404: core.api.serializers.ErrorSerializer,
+            409: core.api.serializers.ErrorSerializer,
         },
     ),
 )
@@ -265,7 +271,12 @@ def sample_metadata_view(request, sample_unique_id):
             sample_obj, schema_obj, payload
         )
     except ValueError as exc:
-        return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        error_message = str(exc)
+        if error_message == "Metadata already stored for this sample":
+            return Response(
+                {"error": error_message}, status=status.HTTP_409_CONFLICT
+            )
+        return Response({"error": error_message}, status=status.HTTP_400_BAD_REQUEST)
 
     if stored_count:
         state_obj = core.models.SampleState.objects.filter(state__exact="Bioinfo").last()
