@@ -149,9 +149,15 @@ class SampleMetadataFilterSerializer(serializers.Serializer):
 class SampleMetadataItemSerializer(serializers.Serializer):
     property = serializers.CharField()
     value = serializers.CharField(allow_null=True, allow_blank=True)
-    classification = serializers.CharField(allow_blank=True, allow_null=True)
-    group_id = serializers.IntegerField(allow_null=True)
-    group_index = serializers.IntegerField(allow_null=True)
+
+    def to_representation(self, instance):
+        if isinstance(instance, dict):
+            property_name = instance.get("property")
+            value = instance.get("value")
+        else:
+            property_name = getattr(instance, "property", None)
+            value = getattr(instance, "value", None)
+        return {property_name: value}
 
 
 class SampleMetadataIngestSerializer(serializers.Serializer):
