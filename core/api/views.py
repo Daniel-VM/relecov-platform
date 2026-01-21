@@ -156,9 +156,16 @@ def sample_detail_view(request, sample_unique_id):
 @extend_schema(
     parameters=[
         OpenApiParameter(
+            name="classification",
+            type=str,
+            required=False,
+            location=OpenApiParameter.QUERY,
+            description="Classification name to list properties for",
+        ),
+        OpenApiParameter(
             name="property",
             type=str,
-            required=True,
+            required=False,
             location=OpenApiParameter.QUERY,
             description="Metadata property name to search across samples",
         ),
@@ -182,6 +189,39 @@ def sample_detail_view(request, sample_unique_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def sample_metadata_property_view(request):
+    classification = request.query_params.get("classification")
+    property_name = request.query_params.get("property")
+
+    if classification and property_name:
+        return Response(
+            {"error": "Use either classification or property, not both"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if classification:
+        filter_serializer = (
+            core.api.serializers.SampleMetadataClassificationFilterSerializer(
+                data={"classification": classification}
+            )
+        )
+        filter_serializer.is_valid(raise_exception=True)
+        try:
+            results = sample_metadata.list_properties_by_classification(
+                filter_serializer.validated_data["classification"]
+            )
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        if not results:
+            return Response(
+                {"error": "No properties found"}, status=status.HTTP_404_NOT_FOUND
+            )
+        response_serializer = (
+            core.api.serializers.SampleMetadataClassificationResultSerializer(
+                results, many=True
+            )
+        )
+        return Response(response_serializer.data, status=status.HTTP_200_OK)
+
     filter_serializer = core.api.serializers.SampleMetadataPropertyFilterSerializer(
         data=request.query_params
     )

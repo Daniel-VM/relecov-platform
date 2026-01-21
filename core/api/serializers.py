@@ -150,6 +150,10 @@ class SampleMetadataPropertyFilterSerializer(serializers.Serializer):
     value = serializers.CharField(required=False, allow_blank=False)
 
 
+class SampleMetadataClassificationFilterSerializer(serializers.Serializer):
+    classification = serializers.CharField(required=True, allow_blank=False)
+
+
 class SampleMetadataSearchSerializer(serializers.Serializer):
     filter = serializers.ListField(child=serializers.CharField(), allow_empty=False)
     match = serializers.ChoiceField(
@@ -175,6 +179,17 @@ class SampleMetadataItemSerializer(serializers.Serializer):
 class SampleMetadataPropertyResultSerializer(serializers.Serializer):
     sample_unique_id = serializers.CharField()
     value = serializers.CharField(allow_null=True, allow_blank=True)
+
+
+class SampleMetadataClassificationResultSerializer(serializers.Serializer):
+    property = serializers.CharField()
+
+    def to_representation(self, instance):
+        if isinstance(instance, dict):
+            property_name = instance.get("property")
+        else:
+            property_name = getattr(instance, "property", None)
+        return {property_name: None}
 
 
 class SampleMetadataSearchResultSerializer(serializers.Serializer):

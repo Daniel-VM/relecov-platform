@@ -157,3 +157,20 @@ def search_samples_metadata(filters, match="all"):
             values_map[item_property] = item.value
 
     return list(results.values())
+
+
+def list_properties_by_classification(classification_name):
+    if not classification_name or not isinstance(classification_name, str):
+        raise ValueError("classification is required")
+    normalized = classification_name.strip()
+    if not normalized:
+        raise ValueError("classification is required")
+    properties = (
+        models.SchemaProperties.objects.filter(
+            classificationID__classification_name__iexact=normalized
+        )
+        .values_list("property", flat=True)
+        .distinct()
+        .order_by("property")
+    )
+    return [{"property": name} for name in properties]
