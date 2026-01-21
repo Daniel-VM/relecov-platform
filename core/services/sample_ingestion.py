@@ -2,7 +2,7 @@ from typing import Tuple
 
 from core import models
 
-
+# FIXME: This function should create sample_unique_id ... request.data comes without it... 
 def ingest_sample(sample_payload: dict, request_user=None) -> Tuple[models.Sample, bool]:
     # Get samples unique id
     raw_unique_id = sample_payload.get("sample_unique_id")
