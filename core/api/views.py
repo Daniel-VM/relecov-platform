@@ -13,6 +13,7 @@ from drf_spectacular.utils import (
     OpenApiExample,
     inline_serializer,
     OpenApiResponse,
+    OpenApiParameter,
     extend_schema_view,
 )
 from rest_framework import serializers
@@ -151,22 +152,141 @@ def sample_detail_view(request, sample_unique_id):
     response_serializer = core.api.serializers.SampleDetailSerializer(sample_obj)
     return Response(response_serializer.data, status=status.HTTP_200_OK)
 
-# FIXME: It requires bioinfo post endpoint before testing
+
+@extend_schema(
+    parameters=[
+        OpenApiParameter(
+            name="property",
+            type=str,
+            required=True,
+            location=OpenApiParameter.QUERY,
+            description="Metadata property name to search across samples",
+        ),
+        OpenApiParameter(
+            name="value",
+            type=str,
+            required=False,
+            location=OpenApiParameter.QUERY,
+            description="Optional value to match for the property",
+        )
+    ],
+    responses={
+        200: core.api.serializers.SampleMetadataPropertyResultSerializer(many=True),
+        400: core.api.serializers.ErrorSerializer,
+        401: core.api.serializers.ErrorSerializer,
+        403: core.api.serializers.ErrorSerializer,
+        404: core.api.serializers.ErrorSerializer,
+    },
+)
+@authentication_classes([SessionAuthentication, BasicAuthentication])
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def sample_metadata_property_view(request):
+    filter_serializer = core.api.serializers.SampleMetadataPropertyFilterSerializer(
+        data=request.query_params
+    )
+    filter_serializer.is_valid(raise_exception=True)
+    property_name = filter_serializer.validated_data["property"]
+    value = filter_serializer.validated_data.get("value")
+
+    try:
+        results = sample_metadata.list_samples_by_property(property_name, value=value)
+    except ValueError as exc:
+        return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    if not results:
+        return Response({"error": "No samples found"}, status=status.HTTP_404_NOT_FOUND)
+
+    response_serializer = core.api.serializers.SampleMetadataPropertyResultSerializer(
+        results, many=True
+    )
+    return Response(response_serializer.data, status=status.HTTP_200_OK)
+
+
+# TODO: Define response body
+# TODO: not ready for complex fields
+@extend_schema(
+    parameters=[
+        OpenApiParameter(
+            name="filter",
+            type=str,
+            required=True,
+            many=True,
+            location=OpenApiParameter.QUERY,
+            description="Repeatable filter: property[:value] or property=value",
+        ),
+        OpenApiParameter(
+            name="match",
+            type=str,
+            required=False,
+            location=OpenApiParameter.QUERY,
+            description="Match mode for filters: all (default) or any",
+        ),
+    ],
+    responses={
+        200: core.api.serializers.SampleMetadataSearchResultSerializer(many=True),
+        400: core.api.serializers.ErrorSerializer,
+        401: core.api.serializers.ErrorSerializer,
+        403: core.api.serializers.ErrorSerializer,
+        404: core.api.serializers.ErrorSerializer,
+    },
+)
+@authentication_classes([SessionAuthentication, BasicAuthentication])
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def sample_metadata_search_view(request):
+    raw_filters = request.query_params.getlist("filter")
+    data = {"filter": raw_filters}
+    if "match" in request.query_params:
+        data["match"] = request.query_params.get("match")
+    filter_serializer = core.api.serializers.SampleMetadataSearchSerializer(data=data)
+    filter_serializer.is_valid(raise_exception=True)
+
+    filters = []
+    for raw_filter in filter_serializer.validated_data["filter"]:
+        raw_filter = raw_filter.strip()
+        if not raw_filter:
+            return Response(
+                {"error": "filter entries cannot be empty"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if ":" in raw_filter:
+            prop, _, value = raw_filter.partition(":")
+        elif "=" in raw_filter:
+            prop, _, value = raw_filter.partition("=")
+        else:
+            prop, value = raw_filter, None
+        prop = prop.strip()
+        if not prop:
+            return Response(
+                {"error": "filter entries must include a property"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if value is not None:
+            value = value.strip()
+            if not value:
+                return Response(
+                    {"error": "filter values cannot be empty"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        filters.append({"property": prop, "value": value})
+
+    try:
+        results = sample_metadata.search_samples_metadata(
+            filters, match=filter_serializer.validated_data.get("match", "all")
+        )
+    except ValueError as exc:
+        return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    if not results:
+        return Response({"error": "No samples found"}, status=status.HTTP_404_NOT_FOUND)
+
+    response_serializer = core.api.serializers.SampleMetadataSearchResultSerializer(
+        results, many=True
+    )
+    return Response(response_serializer.data, status=status.HTTP_200_OK)
+
+
 @extend_schema_view(
     get=extend_schema(
-        parameters=[
-            inline_serializer(
-                name="SampleMetadataQuery",
-                fields={
-                    "classification": serializers.ListField(
-                        child=serializers.CharField(), required=False
-                    ),
-                    "property": serializers.ListField(
-                        child=serializers.CharField(), required=False
-                    ),
-                },
-            )
-        ],
         responses={
             200: core.api.serializers.SampleMetadataItemSerializer(many=True),
             401: core.api.serializers.ErrorSerializer,
@@ -194,38 +314,14 @@ def sample_metadata_view(request, sample_unique_id):
     sample_obj = sample_detail.get_sample_detail(sample_unique_id)
     if sample_obj is None:
         return Response({"error": "Sample not found"}, status=status.HTTP_404_NOT_FOUND)
+    # TODO: complex fields (grouped metadata) are not exposed yet.
 
     # GET method
     if request.method == "GET":
-        classifications = request.query_params.getlist("classification")
-        properties = request.query_params.getlist("property")
-        if len(classifications) == 1 and "," in classifications[0]:
-            classifications = [
-                item.strip() for item in classifications[0].split(",") if item.strip()
-            ]
-        if len(properties) == 1 and "," in properties[0]:
-            properties = [
-                item.strip() for item in properties[0].split(",") if item.strip()
-            ]
-
-        filter_data = {}
-        if classifications:
-            filter_data["classification"] = classifications
-        if properties:
-            filter_data["property"] = properties
-
-        if filter_data:
-            filter_serializer = core.api.serializers.SampleMetadataFilterSerializer(
-                data=filter_data
-            )
-            filter_serializer.is_valid(raise_exception=True)
-            classifications = filter_serializer.validated_data.get("classification")
-            properties = filter_serializer.validated_data.get("property")
-
         metadata_list = sample_metadata.list_sample_metadata(
             sample_obj,
-            classifications=classifications or None,
-            properties=properties or None,
+            classifications=None,
+            properties=None,
         )
         response_serializer = core.api.serializers.SampleMetadataItemSerializer(
             metadata_list, many=True

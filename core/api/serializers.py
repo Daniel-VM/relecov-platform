@@ -145,6 +145,18 @@ class SampleMetadataFilterSerializer(serializers.Serializer):
     )
 
 
+class SampleMetadataPropertyFilterSerializer(serializers.Serializer):
+    property = serializers.CharField(required=True, allow_blank=False)
+    value = serializers.CharField(required=False, allow_blank=False)
+
+
+class SampleMetadataSearchSerializer(serializers.Serializer):
+    filter = serializers.ListField(child=serializers.CharField(), allow_empty=False)
+    match = serializers.ChoiceField(
+        choices=["all", "any"], required=False, default="all"
+    )
+
+
 # FIXME: point to metadata values model instead
 class SampleMetadataItemSerializer(serializers.Serializer):
     property = serializers.CharField()
@@ -158,6 +170,18 @@ class SampleMetadataItemSerializer(serializers.Serializer):
             property_name = getattr(instance, "property", None)
             value = getattr(instance, "value", None)
         return {property_name: value}
+
+
+class SampleMetadataPropertyResultSerializer(serializers.Serializer):
+    sample_unique_id = serializers.CharField()
+    value = serializers.CharField(allow_null=True, allow_blank=True)
+
+
+class SampleMetadataSearchResultSerializer(serializers.Serializer):
+    sample_unique_id = serializers.CharField()
+    values = serializers.DictField(
+        child=serializers.CharField(allow_null=True, allow_blank=True)
+    )
 
 
 class SampleMetadataIngestSerializer(serializers.Serializer):

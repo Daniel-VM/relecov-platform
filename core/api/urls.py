@@ -10,6 +10,16 @@ app_name = "relecov_api"
 urlpatterns = [
     path("samples", core.api.views.samples, name="samples"),
     path(
+        "samples/metadata",
+        core.api.views.sample_metadata_property_view,
+        name="sample_metadata_property",
+    ),
+    path(
+        "samples/metadata/search",
+        core.api.views.sample_metadata_search_view,
+        name="sample_metadata_search",
+    ),
+    path(
         "samples/<str:sample_unique_id>",
         core.api.views.sample_detail_view,
         name="sample_detail",
