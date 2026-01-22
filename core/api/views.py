@@ -30,12 +30,12 @@ import core.api.utils.public_db
 import core.api.utils.variants
 import core.api.utils.common_functions
 import core.config
-from core.services import sample_ingestion
-from core.services import sample_listing
-from core.services import sample_detail
-from core.services import sample_metadata
-from core.services import sample_metadata_ingestion
-from core.services import sample_history
+from core.api.services import sample_ingestion
+from core.api.services import sample_listing
+from core.api.services import sample_detail
+from core.api.services import sample_metadata
+from core.api.services import sample_metadata_ingestion
+from core.api.services import sample_history
 
 
 @extend_schema_view(

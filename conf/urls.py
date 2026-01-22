@@ -43,7 +43,7 @@ urlpatterns = [
         "swagger/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"
     ),
     # REST FRAMEWORK URLS
-    path("api/", include("core.api.urls")),
+    path("v1/", include("core.api.urls")),
     # user accounts
     path("accounts/", include("django.contrib.auth.urls")),
     # path('markdownx/', include('markdownx.urls')),

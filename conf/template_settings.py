@@ -110,6 +110,9 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": True,
     # OTHER SETTINGS
     "GENERIC_ADDITIONAL_PROPERTIES": "dict",
+    # Keep /v1 in real URLs but hide it in Swagger paths for readability.
+    "SCHEMA_PATH_PREFIX": "/v1",
+    "SCHEMA_PATH_PREFIX_TRIM": True,
 }
 
 #  enable the use of frames within HTML documents
