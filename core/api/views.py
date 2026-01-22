@@ -38,30 +38,6 @@ from core.services import sample_metadata_ingestion
 from core.services import sample_history
 
 
-# TODO: mv this to utils
-def _map_error_name(error_message):
-    if error_message == "Sample already exists":
-        return "Sample already defined"
-    if error_message in {
-        "schema_name and schema_version are required",
-        "Schema not found for provided name/version",
-        "Sample has no schema assigned",
-    }:
-        return "Schema name and version is not defined"
-    return "Other"
-
-
-def _record_sample_error(sample_obj, error_name):
-    if sample_obj is None:
-        return
-    try:
-        core.api.utils.common_functions.add_sample_state_history(
-            sample_obj, state_id=None, error_name=error_name
-        )
-    except ValueError:
-        # If no prior state exists, skip logging silently.
-        return
-
 @extend_schema_view(
     post=extend_schema(
         request=core.api.serializers.SampleIngestSerializer,
@@ -108,8 +84,9 @@ def samples(request):
                     sample_unique_id=serializer.validated_data.get("sample_unique_id")
                 ).last()
                 if existing_sample:
-                    _record_sample_error(
-                        existing_sample, _map_error_name(error_message)
+                    core.api.utils.common_functions.record_sample_error(
+                        existing_sample,
+                        core.api.utils.common_functions.map_error_name(error_message),
                     )
                 return Response(
                     {"error": error_message}, status=status.HTTP_409_CONFLICT
@@ -476,7 +453,7 @@ def sample_metadata_view(request, sample_unique_id):
     try:
         serializer.is_valid(raise_exception=True)
     except serializers.ValidationError as exc:
-        _record_sample_error(sample_obj, "Other")
+        core.api.utils.common_functions.record_sample_error(sample_obj, "Other")
         return Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
     payload = serializer.validated_data["payload"]
 
@@ -488,14 +465,20 @@ def sample_metadata_view(request, sample_unique_id):
         ).last()
         if schema_obj is None:
             error_message = "Schema not found for provided name/version"
-            _record_sample_error(sample_obj, _map_error_name(error_message))
+            core.api.utils.common_functions.record_sample_error(
+                sample_obj,
+                core.api.utils.common_functions.map_error_name(error_message),
+            )
             return Response(
                 {"error": error_message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         if sample_obj.schema_obj_id and sample_obj.schema_obj_id != schema_obj.id:
             error_message = "Schema does not match sample schema"
-            _record_sample_error(sample_obj, _map_error_name(error_message))
+            core.api.utils.common_functions.record_sample_error(
+                sample_obj,
+                core.api.utils.common_functions.map_error_name(error_message),
+            )
             return Response(
                 {"error": error_message},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -504,7 +487,10 @@ def sample_metadata_view(request, sample_unique_id):
         schema_obj = sample_obj.schema_obj
         if schema_obj is None:
             error_message = "Sample has no schema assigned"
-            _record_sample_error(sample_obj, _map_error_name(error_message))
+            core.api.utils.common_functions.record_sample_error(
+                sample_obj,
+                core.api.utils.common_functions.map_error_name(error_message),
+            )
             return Response(
                 {"error": error_message},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -517,11 +503,17 @@ def sample_metadata_view(request, sample_unique_id):
     except ValueError as exc:
         error_message = str(exc)
         if error_message == "Metadata already stored for this sample":
-            _record_sample_error(sample_obj, _map_error_name(error_message))
+            core.api.utils.common_functions.record_sample_error(
+                sample_obj,
+                core.api.utils.common_functions.map_error_name(error_message),
+            )
             return Response(
                 {"error": error_message}, status=status.HTTP_409_CONFLICT
             )
-        _record_sample_error(sample_obj, _map_error_name(error_message))
+        core.api.utils.common_functions.record_sample_error(
+            sample_obj,
+            core.api.utils.common_functions.map_error_name(error_message),
+        )
         return Response({"error": error_message}, status=status.HTTP_400_BAD_REQUEST)
 
     if stored_count:

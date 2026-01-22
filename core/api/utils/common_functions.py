@@ -31,6 +31,28 @@ def get_analysis_defined(s_obj):
     ).values_list("value", flat=True)
 
 
+def map_error_name(error_message):
+    if error_message == "Sample already exists":
+        return "Sample already defined"
+    if error_message in {
+        "schema_name and schema_version are required",
+        "Schema not found for provided name/version",
+        "Sample has no schema assigned",
+    }:
+        return "Schema name and version is not defined"
+    return "Other"
+
+
+def record_sample_error(sample_obj, error_name):
+    if sample_obj is None:
+        return
+    try:
+        add_sample_state_history(sample_obj, state_id=None, error_name=error_name)
+    except ValueError:
+        # If no prior state exists, skip logging silently.
+        return
+
+
 def add_sample_state_history(sample_obj, state_id, error_name=None):
     """
     Adds a new state history entry for a sample and marks previous states as not current.
