@@ -35,6 +35,32 @@ from core.services import sample_listing
 from core.services import sample_detail
 from core.services import sample_metadata
 from core.services import sample_metadata_ingestion
+from core.services import sample_history
+
+
+# TODO: mv this to utils
+def _map_error_name(error_message):
+    if error_message == "Sample already exists":
+        return "Sample already defined"
+    if error_message in {
+        "schema_name and schema_version are required",
+        "Schema not found for provided name/version",
+        "Sample has no schema assigned",
+    }:
+        return "Schema name and version is not defined"
+    return "Other"
+
+
+def _record_sample_error(sample_obj, error_name):
+    if sample_obj is None:
+        return
+    try:
+        core.api.utils.common_functions.add_sample_state_history(
+            sample_obj, state_id=None, error_name=error_name
+        )
+    except ValueError:
+        # If no prior state exists, skip logging silently.
+        return
 
 @extend_schema_view(
     post=extend_schema(
@@ -78,6 +104,13 @@ def samples(request):
         except ValueError as exc:
             error_message = str(exc)
             if error_message == "Sample already exists":
+                existing_sample = core.models.Sample.objects.filter(
+                    sample_unique_id=serializer.validated_data.get("sample_unique_id")
+                ).last()
+                if existing_sample:
+                    _record_sample_error(
+                        existing_sample, _map_error_name(error_message)
+                    )
                 return Response(
                     {"error": error_message}, status=status.HTTP_409_CONFLICT
                 )
@@ -150,6 +183,71 @@ def sample_detail_view(request, sample_unique_id):
     if sample_obj is None:
         return Response({"error": "Sample not found"}, status=status.HTTP_404_NOT_FOUND)
     response_serializer = core.api.serializers.SampleDetailSerializer(sample_obj)
+    return Response(response_serializer.data, status=status.HTTP_200_OK)
+
+
+@extend_schema(
+    parameters=[
+        inline_serializer(
+            name="SampleHistoryQuery",
+            fields={
+                "sample_id": serializers.IntegerField(required=False),
+                "sample_unique_id": serializers.CharField(required=False),
+                "state_id": serializers.IntegerField(required=False),
+                "state": serializers.CharField(required=False),
+                "error_name_id": serializers.IntegerField(required=False),
+                "error_name": serializers.CharField(required=False),
+                "is_current": serializers.BooleanField(required=False),
+                "changed_at_from": serializers.DateTimeField(required=False),
+                "changed_at_to": serializers.DateTimeField(required=False),
+            },
+        )
+    ],
+    responses={
+        200: core.api.serializers.SampleHistoryItemSerializer(many=True),
+        400: core.api.serializers.ErrorSerializer,
+        401: core.api.serializers.ErrorSerializer,
+        403: core.api.serializers.ErrorSerializer,
+        404: core.api.serializers.ErrorSerializer,
+    },
+)
+@authentication_classes([SessionAuthentication, BasicAuthentication])
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def sample_history_view(request):
+    filter_serializer = core.api.serializers.SampleHistoryFilterSerializer(
+        data=request.query_params
+    )
+    filter_serializer.is_valid(raise_exception=True)
+    queryset = sample_history.list_sample_history(filter_serializer.validated_data)
+    if not queryset.exists():
+        return Response({"error": "No history found"}, status=status.HTTP_404_NOT_FOUND)
+    response_serializer = core.api.serializers.SampleHistoryItemSerializer(
+        queryset, many=True
+    )
+    return Response(response_serializer.data, status=status.HTTP_200_OK)
+
+
+@extend_schema(
+    responses={
+        200: core.api.serializers.SampleHistoryItemSerializer(many=True),
+        401: core.api.serializers.ErrorSerializer,
+        403: core.api.serializers.ErrorSerializer,
+        404: core.api.serializers.ErrorSerializer,
+    },
+)
+@authentication_classes([SessionAuthentication, BasicAuthentication])
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def sample_history_detail_view(request, sample_unique_id):
+    queryset = sample_history.list_sample_history(
+        {"sample_unique_id": sample_unique_id}
+    )
+    if not queryset.exists():
+        return Response({"error": "No history found"}, status=status.HTTP_404_NOT_FOUND)
+    response_serializer = core.api.serializers.SampleHistoryItemSerializer(
+        queryset, many=True
+    )
     return Response(response_serializer.data, status=status.HTTP_200_OK)
 
 
@@ -375,7 +473,11 @@ def sample_metadata_view(request, sample_unique_id):
             status=status.HTTP_403_FORBIDDEN,
         )
     serializer = core.api.serializers.SampleMetadataIngestSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
+    try:
+        serializer.is_valid(raise_exception=True)
+    except serializers.ValidationError as exc:
+        _record_sample_error(sample_obj, "Other")
+        return Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
     payload = serializer.validated_data["payload"]
 
     schema_name = serializer.validated_data.get("schema_name")
@@ -385,20 +487,26 @@ def sample_metadata_view(request, sample_unique_id):
             schema_name=schema_name, schema_version=schema_version
         ).last()
         if schema_obj is None:
+            error_message = "Schema not found for provided name/version"
+            _record_sample_error(sample_obj, _map_error_name(error_message))
             return Response(
-                {"error": "Schema not found for provided name/version"},
+                {"error": error_message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         if sample_obj.schema_obj_id and sample_obj.schema_obj_id != schema_obj.id:
+            error_message = "Schema does not match sample schema"
+            _record_sample_error(sample_obj, _map_error_name(error_message))
             return Response(
-                {"error": "Schema does not match sample schema"},
+                {"error": error_message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
     else:
         schema_obj = sample_obj.schema_obj
         if schema_obj is None:
+            error_message = "Sample has no schema assigned"
+            _record_sample_error(sample_obj, _map_error_name(error_message))
             return Response(
-                {"error": "Sample has no schema assigned"},
+                {"error": error_message},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -409,9 +517,11 @@ def sample_metadata_view(request, sample_unique_id):
     except ValueError as exc:
         error_message = str(exc)
         if error_message == "Metadata already stored for this sample":
+            _record_sample_error(sample_obj, _map_error_name(error_message))
             return Response(
                 {"error": error_message}, status=status.HTTP_409_CONFLICT
             )
+        _record_sample_error(sample_obj, _map_error_name(error_message))
         return Response({"error": error_message}, status=status.HTTP_400_BAD_REQUEST)
 
     if stored_count:
@@ -440,4 +550,3 @@ def sample_metadata_view(request, sample_unique_id):
     )
     response_serializer.is_valid(raise_exception=True)
     return Response(response_serializer.data, status=status.HTTP_201_CREATED)
-

@@ -53,6 +53,24 @@ class SampleStateHistorySerializer(serializers.ModelSerializer):
         model = core.models.SampleStateHistory
         fields = "__all__"
 
+
+class SampleHistoryItemSerializer(serializers.ModelSerializer):
+    sample_unique_id = serializers.CharField(
+        source="sample.sample_unique_id", read_only=True
+    )
+    state = serializers.CharField(source="state.state", read_only=True)
+    error_name = serializers.CharField(source="error_name.error_name", read_only=True)
+
+    class Meta:
+        model = core.models.SampleStateHistory
+        fields = [
+            "sample_unique_id",
+            "state",
+            "error_name",
+            "is_current",
+            "changed_at",
+        ]
+
 class SampleIngestResponseSerializer(serializers.Serializer):
     sample_unique_id = serializers.CharField()
     sequencing_sample_id = serializers.CharField(allow_null=True, allow_blank=True)
@@ -87,6 +105,30 @@ class SampleFilterSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"error": f"Unknown filter(s): {', '.join(sorted(unknown_keys))}"}
             )
+        return attrs
+
+
+class SampleHistoryFilterSerializer(serializers.Serializer):
+    sample_id = serializers.IntegerField(required=False)
+    sample_unique_id = serializers.CharField(required=False, allow_blank=False)
+    state_id = serializers.IntegerField(required=False)
+    state = serializers.CharField(required=False, allow_blank=False)
+    error_name_id = serializers.IntegerField(required=False)
+    error_name = serializers.CharField(required=False, allow_blank=False)
+    is_current = serializers.BooleanField(required=False)
+    changed_at_from = serializers.DateTimeField(required=False)
+    changed_at_to = serializers.DateTimeField(required=False)
+
+    def validate(self, attrs):
+        allowed_keys = set(self.fields.keys())
+        provided_keys = set(self.initial_data.keys())
+        unknown_keys = provided_keys - allowed_keys
+        if unknown_keys:
+            raise serializers.ValidationError(
+                {"error": f"Unknown filter(s): {', '.join(sorted(unknown_keys))}"}
+            )
+        if "is_current" not in self.initial_data:
+            attrs.pop("is_current", None)
         return attrs
 
 

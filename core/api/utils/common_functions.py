@@ -35,23 +35,17 @@ def add_sample_state_history(sample_obj, state_id, error_name=None):
     """
     Adds a new state history entry for a sample and marks previous states as not current.
     """
-    # Validate the state exists
-    state_obj = None
-    if state_id:
-        state_obj = core.models.SampleState.objects.filter(pk=state_id).last()
-
-    # Validate the state exists or fetch the last state for the sample
+    # Resolve state for the history entry.
     if state_id:
         state_obj = core.models.SampleState.objects.filter(pk=state_id).last()
     else:
-        # If no state is defined, use the last record for that sample
-        state_obj = (
+        last_history = (
             core.models.SampleStateHistory.objects.filter(sample=sample_obj)
             .order_by("-changed_at")
             .first()
         )
+        state_obj = last_history.state if last_history else None
 
-    # Si no se encuentra ningún estado, levantar una excepción
     if not state_obj:
         raise ValueError("No valid state found for the sample.")
 
@@ -61,15 +55,12 @@ def add_sample_state_history(sample_obj, state_id, error_name=None):
             error_name=error_name
         ).last()
     else:
-        # Assign the 'other' entry with pk=1 as default
+        error_name_obj = None
+    if error_name_obj is None:
         error_name_obj = core.models.ErrorName.objects.filter(pk=999).first()
+    if error_name_obj is None:
+        raise ValueError("No valid error name found for the sample.")
 
-    # Mark previous states as not current
-    core.models.SampleStateHistory.objects.filter(
-        sample=sample_obj, is_current=True
-    ).update(is_current=False)
-
-    # Add the new state history
     state_history_obj = {
         "is_current": True,
         "changed_at": timezone.now(),
@@ -87,5 +78,9 @@ def add_sample_state_history(sample_obj, state_id, error_name=None):
         return Response(
             state_history_serializer.errors, status=status.HTTP_400_BAD_REQUEST
         )
+    # Mark previous states as not current after validation succeeds.
+    core.models.SampleStateHistory.objects.filter(
+        sample=sample_obj, is_current=True
+    ).update(is_current=False)
     state_history_serializer.save()
     return True
